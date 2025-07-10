@@ -40,9 +40,11 @@ const mockUsers = [
 export const ChatSidebar: React.FC = () => {
   const { user, logout } = useAuth();
   const { conversations, setCurrentConversation, currentConversation } = useChat();
-  const { collapsed } = useSidebar();
+  const { state } = useSidebar();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'users'>('chats');
+
+  const isCollapsed = state === 'collapsed';
 
   const filteredUsers = mockUsers.filter(u => 
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) &&
@@ -72,9 +74,9 @@ export const ChatSidebar: React.FC = () => {
   };
 
   return (
-    <Sidebar className={`${collapsed ? 'w-16' : 'w-80'} border-r border-border`}>
+    <Sidebar className={`${isCollapsed ? 'w-16' : 'w-80'} border-r border-border`}>
       <SidebarHeader className="p-4 border-b border-border">
-        {!collapsed && (
+        {!isCollapsed && (
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 chat-gradient rounded-xl flex items-center justify-center">
               <MessageCircle className="w-5 h-5 text-white" />
@@ -92,7 +94,7 @@ export const ChatSidebar: React.FC = () => {
       </SidebarHeader>
 
       <SidebarContent className="flex flex-col h-full">
-        {!collapsed && (
+        {!isCollapsed && (
           <div className="p-4 border-b border-border">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -127,7 +129,7 @@ export const ChatSidebar: React.FC = () => {
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'chats' ? (
             <SidebarGroup>
-              {!collapsed && <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>}
+              {!isCollapsed && <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>}
               <SidebarGroupContent>
                 <SidebarMenu>
                   {conversations.map((conversation) => {
@@ -151,7 +153,7 @@ export const ChatSidebar: React.FC = () => {
                               </Avatar>
                               <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser?.status || 'offline')}`} />
                             </div>
-                            {!collapsed && (
+                            {!isCollapsed && (
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
                                   <p className="font-medium text-sm truncate">
@@ -185,7 +187,7 @@ export const ChatSidebar: React.FC = () => {
             </SidebarGroup>
           ) : (
             <SidebarGroup>
-              {!collapsed && <SidebarGroupLabel>All Users</SidebarGroupLabel>}
+              {!isCollapsed && <SidebarGroupLabel>All Users</SidebarGroupLabel>}
               <SidebarGroupContent>
                 <SidebarMenu>
                   {filteredUsers.map((otherUser) => (
@@ -200,7 +202,7 @@ export const ChatSidebar: React.FC = () => {
                             </Avatar>
                             <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser.status)}`} />
                           </div>
-                          {!collapsed && (
+                          {!isCollapsed && (
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-sm truncate">
                                 {otherUser.username}
@@ -222,7 +224,7 @@ export const ChatSidebar: React.FC = () => {
       </SidebarContent>
 
       <SidebarFooter className="p-4 border-t border-border">
-        {!collapsed ? (
+        {!isCollapsed ? (
           <div className="space-y-2">
             <div className="flex items-center space-x-3 p-2 rounded-lg bg-accent/50">
               <Avatar className="w-8 h-8">
