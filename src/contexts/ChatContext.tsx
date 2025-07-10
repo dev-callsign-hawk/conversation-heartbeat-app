@@ -46,15 +46,32 @@ interface Profile {
   last_seen?: string;
 }
 
+interface FriendRequest {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  sender_profile: Profile;
+  receiver_profile: Profile;
+}
+
 interface ChatContextType {
   conversations: Conversation[];
   currentConversation: string | null;
   messages: Message[];
-  users: Profile[];
+  friends: Profile[];
+  friendRequests: FriendRequest[];
+  pendingRequests: FriendRequest[];
   typingUsers: string[];
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   setCurrentConversation: (conversationId: string | null) => void;
   startConversation: (userId: string) => Promise<void>;
+  sendFriendRequest: (userId: string) => Promise<void>;
+  sendFriendRequestByInvite: (inviteCode: string) => Promise<void>;
+  acceptFriendRequest: (requestId: string) => Promise<void>;
+  rejectFriendRequest: (requestId: string) => Promise<void>;
+  generateInviteCode: () => Promise<string | null>;
   startTyping: (conversationId: string) => void;
   stopTyping: (conversationId: string) => void;
   isLoading: boolean;
@@ -75,15 +92,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [users, setUsers] = useState<Profile[]>([]);
+  const [friends, setFriends] = useState<Profile[]>([]);
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
-  // Fetch all users
+  // Fetch friends when user logs in
   useEffect(() => {
     if (user) {
-      fetchUsers();
+      fetchFriends();
+      fetchFriendRequests();
     }
   }, [user]);
 
@@ -110,20 +130,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentConversation]);
 
-  const fetchUsers = async () => {
+  const fetchFriends = async () => {
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .neq('id', user?.id);
+      const { data, error } = await supabase.rpc('get_user_friends');
 
       if (error) {
-        console.error('Error fetching users:', error);
+        console.error('Error fetching friends:', error);
         return;
       }
 
-      // Map the data to ensure proper typing
-      const typedUsers: Profile[] = (data || []).map(item => ({
+      const typedFriends: Profile[] = (data || []).map(item => ({
         id: item.id,
         username: item.username,
         email: item.email,
@@ -132,9 +148,35 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         last_seen: item.last_seen,
       }));
 
-      setUsers(typedUsers);
+      setFriends(typedFriends);
     } catch (err) {
-      console.error('Error in fetchUsers:', err);
+      console.error('Error in fetchFriends:', err);
+    }
+  };
+
+  const fetchFriendRequests = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select(`
+          *,
+          sender_profile:profiles!sender_id(*),
+          receiver_profile:profiles!receiver_id(*)
+        `)
+        .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`);
+
+      if (error) {
+        console.error('Error fetching friend requests:', error);
+        return;
+      }
+
+      const received = (data || []).filter(req => req.receiver_id === user?.id && req.status === 'pending');
+      const sent = (data || []).filter(req => req.sender_id === user?.id && req.status === 'pending');
+
+      setFriendRequests(received);
+      setPendingRequests(sent);
+    } catch (err) {
+      console.error('Error in fetchFriendRequests:', err);
     }
   };
 
@@ -168,7 +210,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Map the data to ensure proper typing
       const typedConversations: Conversation[] = (data || []).map(conv => ({
         id: conv.id,
         type: conv.type,
@@ -214,7 +255,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Map the data to ensure proper typing
       const typedMessages: Message[] = (data || []).map(msg => ({
         id: msg.id,
         conversation_id: msg.conversation_id,
@@ -248,19 +288,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (payload.new.conversation_id === currentConversation) {
             fetchMessages(currentConversation);
           }
-          fetchConversations(); // Update conversation list with new message
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'profiles'
-        },
-        (payload) => {
-          console.log('Profile updated:', payload);
-          fetchUsers(); // Update user statuses
+          fetchConversations();
         }
       )
       .on(
@@ -268,11 +296,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         {
           event: '*',
           schema: 'public',
-          table: 'typing_indicators'
+          table: 'friend_requests'
         },
         (payload) => {
-          console.log('Typing indicator changed:', payload);
-          // Handle typing indicators
+          console.log('Friend request changed:', payload);
+          fetchFriendRequests();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'friendships'
+        },
+        (payload) => {
+          console.log('Friendship changed:', payload);
+          fetchFriends();
         }
       )
       .subscribe();
@@ -303,7 +343,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Update conversation's updated_at timestamp
       await supabase
         .from('conversations')
         .update({ updated_at: new Date().toISOString() })
@@ -319,12 +358,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const startConversation = async (otherUserId: string) => {
+  const startConversation = async (friendId: string) => {
     if (!user) return;
 
     try {
       const { data, error } = await supabase.rpc('get_or_create_conversation', {
-        other_user_id: otherUserId
+        other_user_id: friendId
       });
 
       if (error) {
@@ -339,19 +378,154 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (data) {
         setCurrentConversation(data);
-        await fetchConversations(); // Refresh conversations
-        toast({
-          title: "Conversation started",
-          description: "You can now start chatting!",
-        });
+        await fetchConversations();
       }
     } catch (err) {
       console.error('Error in startConversation:', err);
+    }
+  };
+
+  const sendFriendRequest = async (userId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('friend_requests')
+        .insert({
+          sender_id: user.id,
+          receiver_id: userId
+        });
+
+      if (error) {
+        console.error('Error sending friend request:', error);
+        toast({
+          title: "Error",
+          description: "Failed to send friend request. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       toast({
-        title: "Error",
-        description: "Failed to start conversation. Please try again.",
-        variant: "destructive",
+        title: "Friend request sent!",
+        description: "Your friend request has been sent successfully.",
       });
+
+      fetchFriendRequests();
+    } catch (err) {
+      console.error('Error in sendFriendRequest:', err);
+    }
+  };
+
+  const sendFriendRequestByInvite = async (inviteCode: string) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase.rpc('send_friend_request_by_invite', {
+        invite_code: inviteCode
+      });
+
+      if (error) {
+        console.error('Error sending friend request by invite:', error);
+        toast({
+          title: "Error",
+          description: error.message || "Failed to send friend request.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Friend request sent!",
+        description: "Your friend request has been sent successfully.",
+      });
+
+      fetchFriendRequests();
+    } catch (err) {
+      console.error('Error in sendFriendRequestByInvite:', err);
+    }
+  };
+
+  const acceptFriendRequest = async (requestId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase.rpc('accept_friend_request', {
+        request_id: requestId
+      });
+
+      if (error) {
+        console.error('Error accepting friend request:', error);
+        toast({
+          title: "Error",
+          description: "Failed to accept friend request. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Friend request accepted!",
+        description: "You are now friends and can start chatting.",
+      });
+
+      fetchFriends();
+      fetchFriendRequests();
+    } catch (err) {
+      console.error('Error in acceptFriendRequest:', err);
+    }
+  };
+
+  const rejectFriendRequest = async (requestId: string) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+
+      if (error) {
+        console.error('Error rejecting friend request:', error);
+        toast({
+          title: "Error",
+          description: "Failed to reject friend request. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Friend request rejected",
+        description: "The friend request has been rejected.",
+      });
+
+      fetchFriendRequests();
+    } catch (err) {
+      console.error('Error in rejectFriendRequest:', err);
+    }
+  };
+
+  const generateInviteCode = async (): Promise<string | null> => {
+    if (!user) return null;
+
+    try {
+      const { data, error } = await supabase.rpc('generate_friend_invite');
+
+      if (error) {
+        console.error('Error generating invite code:', error);
+        toast({
+          title: "Error",
+          description: "Failed to generate invite code. Please try again.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      return data;
+    } catch (err) {
+      console.error('Error in generateInviteCode:', err);
+      return null;
     }
   };
 
@@ -394,11 +568,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       conversations,
       currentConversation,
       messages,
-      users,
+      friends,
+      friendRequests,
+      pendingRequests,
       typingUsers,
       sendMessage,
       setCurrentConversation,
       startConversation,
+      sendFriendRequest,
+      sendFriendRequestByInvite,
+      acceptFriendRequest,
+      rejectFriendRequest,
+      generateInviteCode,
       startTyping,
       stopTyping,
       isLoading

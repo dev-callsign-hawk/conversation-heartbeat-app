@@ -85,6 +85,84 @@ export type Database = {
           },
         ]
       }
+      friend_requests: {
+        Row: {
+          created_at: string | null
+          id: string
+          receiver_id: string
+          sender_id: string
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          receiver_id: string
+          sender_id: string
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          receiver_id?: string
+          sender_id?: string
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friend_requests_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friend_requests_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      friendships: {
+        Row: {
+          created_at: string | null
+          id: string
+          user1_id: string
+          user2_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          user1_id: string
+          user2_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          user1_id?: string
+          user2_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_user1_id_fkey"
+            columns: ["user1_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_user2_id_fkey"
+            columns: ["user2_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
@@ -149,6 +227,7 @@ export type Database = {
           created_at: string | null
           email: string
           id: string
+          invite_code: string | null
           last_seen: string | null
           status: string | null
           updated_at: string | null
@@ -159,6 +238,7 @@ export type Database = {
           created_at?: string | null
           email: string
           id: string
+          invite_code?: string | null
           last_seen?: string | null
           status?: string | null
           updated_at?: string | null
@@ -169,6 +249,7 @@ export type Database = {
           created_at?: string | null
           email?: string
           id?: string
+          invite_code?: string | null
           last_seen?: string | null
           status?: string | null
           updated_at?: string | null
@@ -220,8 +301,31 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_friend_request: {
+        Args: { request_id: string }
+        Returns: undefined
+      }
+      generate_friend_invite: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       get_or_create_conversation: {
         Args: { other_user_id: string }
+        Returns: string
+      }
+      get_user_friends: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          username: string
+          email: string
+          avatar_url: string
+          status: string
+          last_seen: string
+        }[]
+      }
+      send_friend_request_by_invite: {
+        Args: { invite_code: string }
         Returns: string
       }
       update_user_status: {
