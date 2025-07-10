@@ -122,7 +122,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      setUsers(data || []);
+      // Map the data to ensure proper typing
+      const typedUsers: Profile[] = (data || []).map(item => ({
+        id: item.id,
+        username: item.username,
+        email: item.email,
+        avatar_url: item.avatar_url,
+        status: (item.status as 'online' | 'offline' | 'away') || 'offline',
+        last_seen: item.last_seen,
+      }));
+
+      setUsers(typedUsers);
     } catch (err) {
       console.error('Error in fetchUsers:', err);
     }
@@ -146,6 +156,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             content,
             created_at,
             sender_id,
+            conversation_id,
+            message_type,
             profiles(username, avatar_url)
           )
         `)
@@ -156,15 +168,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Get latest message for each conversation
-      const conversationsWithLatestMessage = (data || []).map(conv => ({
-        ...conv,
-        messages: conv.messages
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      // Map the data to ensure proper typing
+      const typedConversations: Conversation[] = (data || []).map(conv => ({
+        id: conv.id,
+        type: conv.type,
+        name: conv.name,
+        created_at: conv.created_at || new Date().toISOString(),
+        updated_at: conv.updated_at || new Date().toISOString(),
+        conversation_participants: conv.conversation_participants || [],
+        messages: (conv.messages || [])
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
           .slice(0, 1)
+          .map((msg: any) => ({
+            id: msg.id,
+            conversation_id: msg.conversation_id || conv.id,
+            sender_id: msg.sender_id,
+            content: msg.content,
+            message_type: msg.message_type || 'text',
+            created_at: msg.created_at,
+            profiles: msg.profiles || { username: 'Unknown', avatar_url: null }
+          }))
       }));
 
-      setConversations(conversationsWithLatestMessage);
+      setConversations(typedConversations);
     } catch (err) {
       console.error('Error in fetchConversations:', err);
     } finally {
@@ -188,7 +214,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      setMessages(data || []);
+      // Map the data to ensure proper typing
+      const typedMessages: Message[] = (data || []).map(msg => ({
+        id: msg.id,
+        conversation_id: msg.conversation_id,
+        sender_id: msg.sender_id,
+        content: msg.content,
+        message_type: msg.message_type || 'text',
+        created_at: msg.created_at,
+        profiles: msg.profiles || { username: 'Unknown', avatar_url: null }
+      }));
+
+      setMessages(typedMessages);
     } catch (err) {
       console.error('Error in fetchMessages:', err);
     }

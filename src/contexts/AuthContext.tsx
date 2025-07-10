@@ -83,7 +83,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           username: data.username,
           email: data.email,
           avatar_url: data.avatar_url,
-          status: data.status,
+          status: (data.status as 'online' | 'offline' | 'away') || 'offline',
           last_seen: data.last_seen,
         });
       }
