@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { 
   Send, 
   Smile, 
@@ -16,12 +15,6 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useChat } from '@/contexts/ChatContext';
 
-const mockUsers = [
-  { id: '1', username: 'Alice Johnson', email: 'alice@example.com', status: 'online' as const },
-  { id: '2', username: 'Bob Smith', email: 'bob@example.com', status: 'away' as const },
-  { id: '3', username: 'Charlie Brown', email: 'charlie@example.com', status: 'online' as const },
-];
-
 export const ChatArea: React.FC = () => {
   const { user } = useAuth();
   const { 
@@ -29,7 +22,6 @@ export const ChatArea: React.FC = () => {
     messages, 
     conversations, 
     sendMessage, 
-    typingUsers,
     startTyping,
     stopTyping
   } = useChat();
@@ -40,15 +32,8 @@ export const ChatArea: React.FC = () => {
 
   // Get current conversation details
   const currentConv = conversations.find(conv => conv.id === currentConversation);
-  const otherUserId = currentConv?.participants.find(id => id !== user?.id);
-  const otherUser = mockUsers.find(u => u.id === otherUserId);
-
-  // Filter messages for current conversation
-  const conversationMessages = messages.filter(msg => {
-    if (!currentConv) return false;
-    return currentConv.participants.includes(msg.senderId) && 
-           currentConv.participants.includes(msg.receiverId);
-  });
+  const otherParticipant = currentConv?.conversation_participants.find(p => p.user_id !== user?.id);
+  const otherUser = otherParticipant?.profiles;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -56,13 +41,13 @@ export const ChatArea: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [conversationMessages]);
+  }, [messages]);
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !otherUserId) return;
+    if (!newMessage.trim() || !currentConversation) return;
 
-    sendMessage(otherUserId, newMessage.trim());
+    const messageContent = newMessage.trim();
     setNewMessage('');
     setIsTyping(false);
     
@@ -73,6 +58,8 @@ export const ChatArea: React.FC = () => {
     if (currentConversation) {
       stopTyping(currentConversation);
     }
+
+    await sendMessage(currentConversation, messageContent);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,12 +84,12 @@ export const ChatArea: React.FC = () => {
     }, 1000);
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (dateString: string) => {
     return new Intl.DateTimeFormat('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
-    }).format(date);
+    }).format(new Date(dateString));
   };
 
   const getStatusColor = (status: string) => {
@@ -126,7 +113,7 @@ export const ChatArea: React.FC = () => {
               Welcome to Lovable Chat
             </h3>
             <p className="text-gray-500 mt-2">
-              Select a conversation to start chatting
+              Select a conversation to start chatting or click on a user to start a new conversation
             </p>
           </div>
         </div>
@@ -142,7 +129,7 @@ export const ChatArea: React.FC = () => {
           <div className="relative">
             <Avatar className="w-10 h-10">
               <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white">
-                {otherUser.username.charAt(0)}
+                {otherUser.username.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser.status)}`} />
@@ -151,20 +138,17 @@ export const ChatArea: React.FC = () => {
             <h2 className="font-semibold text-gray-900">{otherUser.username}</h2>
             <p className="text-sm text-muted-foreground capitalize">
               {otherUser.status}
-              {typingUsers.includes(otherUserId!) && (
-                <span className="text-blue-600 animate-pulse-soft"> • typing...</span>
-              )}
             </p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" title="Voice Call">
             <Phone className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" title="Video Call">
             <Video className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" title="More Options">
             <MoreVertical className="w-4 h-4" />
           </Button>
         </div>
@@ -172,68 +156,54 @@ export const ChatArea: React.FC = () => {
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-gray-50/20 to-blue-50/20">
-        {conversationMessages.map((message) => {
-          const isOwn = message.senderId === user?.id;
-          const sender = mockUsers.find(u => u.id === message.senderId);
-          
-          return (
-            <div
-              key={message.id}
-              className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`flex items-end space-x-2 max-w-[70%] ${isOwn ? 'flex-row-reverse space-x-reverse' : ''}`}>
-                {!isOwn && (
-                  <Avatar className="w-8 h-8 mb-1">
-                    <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-500 text-white text-xs">
-                      {sender?.username.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-                <div
-                  className={`px-4 py-2 rounded-2xl relative group ${
-                    isOwn
-                      ? 'message-gradient text-white rounded-br-md'
-                      : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md shadow-sm'
-                  }`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                  <div className={`flex items-center justify-end mt-1 space-x-1 ${
-                    isOwn ? 'text-white/70' : 'text-gray-500'
-                  }`}>
-                    <span className="text-xs">
-                      {formatTime(message.timestamp)}
-                    </span>
-                    {isOwn && (
-                      <div className="flex space-x-1">
-                        <Circle className="w-2 h-2 fill-current" />
-                        {message.read && <Circle className="w-2 h-2 fill-current" />}
-                      </div>
-                    )}
+        {messages.length === 0 ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-gray-500 text-center">
+              No messages yet. Start the conversation!
+            </p>
+          </div>
+        ) : (
+          messages.map((message) => {
+            const isOwn = message.sender_id === user?.id;
+            
+            return (
+              <div
+                key={message.id}
+                className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`flex items-end space-x-2 max-w-[70%] ${isOwn ? 'flex-row-reverse space-x-reverse' : ''}`}>
+                  {!isOwn && (
+                    <Avatar className="w-8 h-8 mb-1">
+                      <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-500 text-white text-xs">
+                        {message.profiles?.username?.charAt(0).toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
+                  <div
+                    className={`px-4 py-2 rounded-2xl relative group ${
+                      isOwn
+                        ? 'message-gradient text-white rounded-br-md'
+                        : 'bg-white border border-gray-200 text-gray-900 rounded-bl-md shadow-sm'
+                    }`}
+                  >
+                    <p className="text-sm">{message.content}</p>
+                    <div className={`flex items-center justify-end mt-1 space-x-1 ${
+                      isOwn ? 'text-white/70' : 'text-gray-500'
+                    }`}>
+                      <span className="text-xs">
+                        {formatTime(message.created_at)}
+                      </span>
+                      {isOwn && (
+                        <div className="flex space-x-1">
+                          <Circle className="w-2 h-2 fill-current" />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-        
-        {/* Typing Indicator */}
-        {typingUsers.includes(otherUserId!) && (
-          <div className="flex justify-start">
-            <div className="flex items-end space-x-2 max-w-[70%]">
-              <Avatar className="w-8 h-8 mb-1">
-                <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-500 text-white text-xs">
-                  {otherUser.username.charAt(0)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-white border border-gray-200 shadow-sm">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce-subtle"></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce-subtle" style={{ animationDelay: '0.1s' }}></div>
-                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce-subtle" style={{ animationDelay: '0.2s' }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
+            );
+          })
         )}
         
         <div ref={messagesEndRef} />
@@ -242,7 +212,7 @@ export const ChatArea: React.FC = () => {
       {/* Message Input */}
       <div className="p-4 border-t border-border bg-background/95 backdrop-blur-sm">
         <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
-          <Button variant="ghost" size="sm" type="button">
+          <Button variant="ghost" size="sm" type="button" title="Attach File">
             <Paperclip className="w-4 h-4" />
           </Button>
           <div className="flex-1 relative">
@@ -252,7 +222,7 @@ export const ChatArea: React.FC = () => {
               placeholder="Type a message..."
               className="pr-10 rounded-full bg-gray-50 border-gray-200 focus:bg-white transition-colors"
             />
-            <Button variant="ghost" size="sm" type="button" className="absolute right-1 top-1/2 transform -translate-y-1/2">
+            <Button variant="ghost" size="sm" type="button" className="absolute right-1 top-1/2 transform -translate-y-1/2" title="Add Emoji">
               <Smile className="w-4 h-4" />
             </Button>
           </div>
@@ -261,6 +231,7 @@ export const ChatArea: React.FC = () => {
             size="sm" 
             className="chat-gradient hover:opacity-90 transition-opacity rounded-full w-10 h-10 p-0"
             disabled={!newMessage.trim()}
+            title="Send Message"
           >
             <Send className="w-4 h-4" />
           </Button>

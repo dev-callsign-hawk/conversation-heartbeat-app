@@ -39,17 +39,21 @@ const mockUsers = [
 
 export const ChatSidebar: React.FC = () => {
   const { user, logout } = useAuth();
-  const { conversations, setCurrentConversation, currentConversation } = useChat();
+  const { conversations, setCurrentConversation, currentConversation, users, startConversation, isLoading } = useChat();
   const { state } = useSidebar();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'users'>('chats');
 
   const isCollapsed = state === 'collapsed';
 
-  const filteredUsers = mockUsers.filter(u => 
-    u.username.toLowerCase().includes(searchTerm.toLowerCase()) &&
-    u.id !== user?.id
+  const filteredUsers = users.filter(u => 
+    u.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const filteredConversations = conversations.filter(conv => {
+    const otherUser = conv.conversation_participants.find(p => p.user_id !== user?.id);
+    return otherUser?.profiles.username.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -60,17 +64,27 @@ export const ChatSidebar: React.FC = () => {
     }
   };
 
-  const getUserName = (userId: string) => {
-    const foundUser = mockUsers.find(u => u.id === userId);
-    return foundUser?.username || 'Unknown User';
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+
+    if (diffInHours < 24) {
+      return new Intl.DateTimeFormat('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      }).format(date);
+    } else {
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric'
+      }).format(date);
+    }
   };
 
-  const formatTime = (date: Date) => {
-    return new Intl.DateTimeFormat('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    }).format(date);
+  const handleUserClick = async (userId: string) => {
+    await startConversation(userId);
   };
 
   return (
@@ -132,56 +146,64 @@ export const ChatSidebar: React.FC = () => {
               {!isCollapsed && <SidebarGroupLabel>Recent Chats</SidebarGroupLabel>}
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {conversations.map((conversation) => {
-                    const otherUserId = conversation.participants.find(id => id !== user?.id);
-                    const otherUser = mockUsers.find(u => u.id === otherUserId);
-                    
-                    return (
-                      <SidebarMenuItem key={conversation.id}>
-                        <SidebarMenuButton
-                          onClick={() => setCurrentConversation(conversation.id)}
-                          className={`w-full p-3 hover:bg-accent rounded-lg transition-colors ${
-                            currentConversation === conversation.id ? 'bg-accent' : ''
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3 w-full">
-                            <div className="relative">
-                              <Avatar className="w-10 h-10">
-                                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white">
-                                  {otherUser?.username.charAt(0)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser?.status || 'offline')}`} />
-                            </div>
-                            {!isCollapsed && (
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between">
-                                  <p className="font-medium text-sm truncate">
-                                    {otherUser?.username}
-                                  </p>
-                                  {conversation.lastMessage && (
-                                    <span className="text-xs text-muted-foreground">
-                                      {formatTime(conversation.lastMessage.timestamp)}
-                                    </span>
+                  {isLoading ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      Loading conversations...
+                    </div>
+                  ) : filteredConversations.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      No conversations yet
+                    </div>
+                  ) : (
+                    filteredConversations.map((conversation) => {
+                      const otherParticipant = conversation.conversation_participants.find(p => p.user_id !== user?.id);
+                      const otherUser = otherParticipant?.profiles;
+                      const latestMessage = conversation.messages[0];
+                      
+                      if (!otherUser) return null;
+
+                      return (
+                        <SidebarMenuItem key={conversation.id}>
+                          <SidebarMenuButton
+                            onClick={() => setCurrentConversation(conversation.id)}
+                            className={`w-full p-3 hover:bg-accent rounded-lg transition-colors ${
+                              currentConversation === conversation.id ? 'bg-accent' : ''
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3 w-full">
+                              <div className="relative">
+                                <Avatar className="w-10 h-10">
+                                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-500 text-white">
+                                    {otherUser.username.charAt(0).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser.status)}`} />
+                              </div>
+                              {!isCollapsed && (
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between">
+                                    <p className="font-medium text-sm truncate">
+                                      {otherUser.username}
+                                    </p>
+                                    {latestMessage && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {formatTime(latestMessage.created_at)}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {latestMessage && (
+                                    <p className="text-xs text-muted-foreground truncate">
+                                      {latestMessage.content}
+                                    </p>
                                   )}
                                 </div>
-                                {conversation.lastMessage && (
-                                  <p className="text-xs text-muted-foreground truncate">
-                                    {conversation.lastMessage.content}
-                                  </p>
-                                )}
-                                {conversation.unreadCount > 0 && (
-                                  <Badge variant="destructive" className="mt-1 text-xs">
-                                    {conversation.unreadCount}
-                                  </Badge>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    );
-                  })}
+                              )}
+                            </div>
+                          </SidebarMenuButton>
+                        </SidebarMenuItem>
+                      );
+                    })
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -190,32 +212,41 @@ export const ChatSidebar: React.FC = () => {
               {!isCollapsed && <SidebarGroupLabel>All Users</SidebarGroupLabel>}
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {filteredUsers.map((otherUser) => (
-                    <SidebarMenuItem key={otherUser.id}>
-                      <SidebarMenuButton className="w-full p-3 hover:bg-accent rounded-lg transition-colors">
-                        <div className="flex items-center space-x-3 w-full">
-                          <div className="relative">
-                            <Avatar className="w-10 h-10">
-                              <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-500 text-white">
-                                {otherUser.username.charAt(0)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser.status)}`} />
-                          </div>
-                          {!isCollapsed && (
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm truncate">
-                                {otherUser.username}
-                              </p>
-                              <p className="text-xs text-muted-foreground capitalize">
-                                {otherUser.status}
-                              </p>
+                  {filteredUsers.length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground">
+                      No users found
+                    </div>
+                  ) : (
+                    filteredUsers.map((otherUser) => (
+                      <SidebarMenuItem key={otherUser.id}>
+                        <SidebarMenuButton 
+                          onClick={() => handleUserClick(otherUser.id)}
+                          className="w-full p-3 hover:bg-accent rounded-lg transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center space-x-3 w-full">
+                            <div className="relative">
+                              <Avatar className="w-10 h-10">
+                                <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-500 text-white">
+                                  {otherUser.username.charAt(0).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(otherUser.status)}`} />
                             </div>
-                          )}
-                        </div>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  ))}
+                            {!isCollapsed && (
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">
+                                  {otherUser.username}
+                                </p>
+                                <p className="text-xs text-muted-foreground capitalize">
+                                  {otherUser.status}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))
+                  )}
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -229,29 +260,29 @@ export const ChatSidebar: React.FC = () => {
             <div className="flex items-center space-x-3 p-2 rounded-lg bg-accent/50">
               <Avatar className="w-8 h-8">
                 <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-sm">
-                  {user?.username.charAt(0)}
+                  {user?.username.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{user?.username}</p>
-                <p className="text-xs text-muted-foreground">Online</p>
+                <p className="text-xs text-muted-foreground capitalize">{user?.status || 'Online'}</p>
               </div>
             </div>
             <div className="flex space-x-1">
-              <Button variant="ghost" size="sm" className="flex-1">
+              <Button variant="ghost" size="sm" className="flex-1" title="Settings">
                 <Settings className="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="sm" onClick={logout} className="flex-1">
+              <Button variant="ghost" size="sm" onClick={logout} className="flex-1" title="Logout">
                 <LogOut className="w-4 h-4" />
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-2">
-            <Button variant="ghost" size="sm" className="w-full">
+            <Button variant="ghost" size="sm" className="w-full" title="Profile">
               <User className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={logout} className="w-full">
+            <Button variant="ghost" size="sm" onClick={logout} className="w-full" title="Logout">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>

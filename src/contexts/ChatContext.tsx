@@ -1,33 +1,63 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { toast } from '@/hooks/use-toast';
 
 interface Message {
   id: string;
-  senderId: string;
-  receiverId: string;
+  conversation_id: string;
+  sender_id: string;
   content: string;
-  timestamp: Date;
-  read: boolean;
+  message_type: string;
+  created_at: string;
+  profiles: {
+    username: string;
+    avatar_url?: string;
+  };
 }
 
 interface Conversation {
   id: string;
-  participants: string[];
-  lastMessage?: Message;
-  unreadCount: number;
+  type: string;
+  name?: string;
+  created_at: string;
+  updated_at: string;
+  conversation_participants: {
+    user_id: string;
+    profiles: {
+      id: string;
+      username: string;
+      email: string;
+      avatar_url?: string;
+      status: string;
+    };
+  }[];
+  messages: Message[];
+}
+
+interface Profile {
+  id: string;
+  username: string;
+  email: string;
+  avatar_url?: string;
+  status: 'online' | 'offline' | 'away';
+  last_seen?: string;
 }
 
 interface ChatContextType {
   conversations: Conversation[];
   currentConversation: string | null;
   messages: Message[];
-  onlineUsers: string[];
+  users: Profile[];
   typingUsers: string[];
-  sendMessage: (receiverId: string, content: string) => void;
+  sendMessage: (conversationId: string, content: string) => Promise<void>;
   setCurrentConversation: (conversationId: string | null) => void;
+  startConversation: (userId: string) => Promise<void>;
   startTyping: (conversationId: string) => void;
   stopTyping: (conversationId: string) => void;
+  isLoading: boolean;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -45,148 +75,281 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [currentConversation, setCurrentConversation] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [onlineUsers, setOnlineUsers] = useState<string[]>(['1', '2', '3']);
+  const [users, setUsers] = useState<Profile[]>([]);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
-  // Mock data initialization
+  // Fetch all users
   useEffect(() => {
     if (user) {
-      const mockConversations: Conversation[] = [
-        {
-          id: 'conv_1',
-          participants: [user.id, '1'],
-          lastMessage: {
-            id: 'msg_1',
-            senderId: '1',
-            receiverId: user.id,
-            content: 'Hey there! How are you doing?',
-            timestamp: new Date(Date.now() - 300000),
-            read: false
-          },
-          unreadCount: 1
-        },
-        {
-          id: 'conv_2',
-          participants: [user.id, '2'],
-          lastMessage: {
-            id: 'msg_2',
-            senderId: user.id,
-            receiverId: '2',
-            content: 'Thanks for the help earlier!',
-            timestamp: new Date(Date.now() - 600000),
-            read: true
-          },
-          unreadCount: 0
-        }
-      ];
-      
-      setConversations(mockConversations);
-      
-      const mockMessages: Message[] = [
-        {
-          id: 'msg_1',
-          senderId: '1',
-          receiverId: user.id,
-          content: 'Hey there! How are you doing?',
-          timestamp: new Date(Date.now() - 300000),
-          read: false
-        },
-        {
-          id: 'msg_3',
-          senderId: user.id,
-          receiverId: '1',
-          content: 'I\'m doing great! Thanks for asking. How about you?',
-          timestamp: new Date(Date.now() - 200000),
-          read: true
-        },
-        {
-          id: 'msg_4',
-          senderId: '1',
-          receiverId: user.id,
-          content: 'Awesome! I\'m doing well too. Just working on some exciting projects.',
-          timestamp: new Date(Date.now() - 100000),
-          read: false
-        }
-      ];
-      
-      setMessages(mockMessages);
+      fetchUsers();
     }
   }, [user]);
 
-  const sendMessage = (receiverId: string, content: string) => {
+  // Fetch conversations when user logs in
+  useEffect(() => {
+    if (user) {
+      fetchConversations();
+      setupRealtimeSubscription();
+    }
+
+    return () => {
+      if (channel) {
+        channel.unsubscribe();
+      }
+    };
+  }, [user]);
+
+  // Fetch messages when conversation changes
+  useEffect(() => {
+    if (currentConversation) {
+      fetchMessages(currentConversation);
+    } else {
+      setMessages([]);
+    }
+  }, [currentConversation]);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('id', user?.id);
+
+      if (error) {
+        console.error('Error fetching users:', error);
+        return;
+      }
+
+      setUsers(data || []);
+    } catch (err) {
+      console.error('Error in fetchUsers:', err);
+    }
+  };
+
+  const fetchConversations = async () => {
     if (!user) return;
 
-    const newMessage: Message = {
-      id: `msg_${Date.now()}`,
-      senderId: user.id,
-      receiverId,
-      content,
-      timestamp: new Date(),
-      read: false
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-
-    // Update conversation
-    setConversations(prev => 
-      prev.map(conv => 
-        conv.participants.includes(receiverId) 
-          ? { ...conv, lastMessage: newMessage }
-          : conv
-      )
-    );
-
-    // Simulate typing indicator
-    setTimeout(() => {
-      setTypingUsers(prev => [...prev, receiverId]);
-      setTimeout(() => {
-        setTypingUsers(prev => prev.filter(id => id !== receiverId));
-        
-        // Simulate auto-reply
-        const autoReply: Message = {
-          id: `msg_${Date.now() + 1}`,
-          senderId: receiverId,
-          receiverId: user.id,
-          content: generateAutoReply(content),
-          timestamp: new Date(),
-          read: false
-        };
-        
-        setMessages(prev => [...prev, autoReply]);
-        setConversations(prev => 
-          prev.map(conv => 
-            conv.participants.includes(receiverId) 
-              ? { ...conv, lastMessage: autoReply, unreadCount: conv.unreadCount + 1 }
-              : conv
+    try {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('conversations')
+        .select(`
+          *,
+          conversation_participants(
+            user_id,
+            profiles(id, username, email, avatar_url, status)
+          ),
+          messages(
+            id,
+            content,
+            created_at,
+            sender_id,
+            profiles(username, avatar_url)
           )
-        );
-      }, 2000);
-    }, 500);
+        `)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching conversations:', error);
+        return;
+      }
+
+      // Get latest message for each conversation
+      const conversationsWithLatestMessage = (data || []).map(conv => ({
+        ...conv,
+        messages: conv.messages
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          .slice(0, 1)
+      }));
+
+      setConversations(conversationsWithLatestMessage);
+    } catch (err) {
+      console.error('Error in fetchConversations:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const generateAutoReply = (originalMessage: string): string => {
-    const replies = [
-      "That's interesting! Tell me more.",
-      "I completely agree with you!",
-      "Thanks for sharing that.",
-      "That sounds really cool!",
-      "I'm glad to hear that.",
-      "Wow, that's amazing!",
-      "I see what you mean.",
-      "That makes total sense.",
-    ];
-    
-    return replies[Math.floor(Math.random() * replies.length)];
+  const fetchMessages = async (conversationId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          profiles(username, avatar_url)
+        `)
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching messages:', error);
+        return;
+      }
+
+      setMessages(data || []);
+    } catch (err) {
+      console.error('Error in fetchMessages:', err);
+    }
   };
 
-  const startTyping = (conversationId: string) => {
-    // In a real app, this would emit a socket event
-    console.log(`Started typing in ${conversationId}`);
+  const setupRealtimeSubscription = () => {
+    if (!user) return;
+
+    const newChannel = supabase
+      .channel('chat-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages'
+        },
+        (payload) => {
+          console.log('New message:', payload);
+          if (payload.new.conversation_id === currentConversation) {
+            fetchMessages(currentConversation);
+          }
+          fetchConversations(); // Update conversation list with new message
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Profile updated:', payload);
+          fetchUsers(); // Update user statuses
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'typing_indicators'
+        },
+        (payload) => {
+          console.log('Typing indicator changed:', payload);
+          // Handle typing indicators
+        }
+      )
+      .subscribe();
+
+    setChannel(newChannel);
   };
 
-  const stopTyping = (conversationId: string) => {
-    // In a real app, this would emit a socket event
-    console.log(`Stopped typing in ${conversationId}`);
+  const sendMessage = async (conversationId: string, content: string) => {
+    if (!user || !content.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          sender_id: user.id,
+          content: content.trim(),
+          message_type: 'text'
+        });
+
+      if (error) {
+        console.error('Error sending message:', error);
+        toast({
+          title: "Error",
+          description: "Failed to send message. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Update conversation's updated_at timestamp
+      await supabase
+        .from('conversations')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+    } catch (err) {
+      console.error('Error in sendMessage:', err);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startConversation = async (otherUserId: string) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase.rpc('get_or_create_conversation', {
+        other_user_id: otherUserId
+      });
+
+      if (error) {
+        console.error('Error starting conversation:', error);
+        toast({
+          title: "Error",
+          description: "Failed to start conversation. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data) {
+        setCurrentConversation(data);
+        await fetchConversations(); // Refresh conversations
+        toast({
+          title: "Conversation started",
+          description: "You can now start chatting!",
+        });
+      }
+    } catch (err) {
+      console.error('Error in startConversation:', err);
+      toast({
+        title: "Error",
+        description: "Failed to start conversation. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const startTyping = async (conversationId: string) => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('typing_indicators')
+        .upsert({
+          conversation_id: conversationId,
+          user_id: user.id,
+          is_typing: true,
+          updated_at: new Date().toISOString()
+        });
+    } catch (err) {
+      console.error('Error in startTyping:', err);
+    }
+  };
+
+  const stopTyping = async (conversationId: string) => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from('typing_indicators')
+        .upsert({
+          conversation_id: conversationId,
+          user_id: user.id,
+          is_typing: false,
+          updated_at: new Date().toISOString()
+        });
+    } catch (err) {
+      console.error('Error in stopTyping:', err);
+    }
   };
 
   return (
@@ -194,12 +357,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       conversations,
       currentConversation,
       messages,
-      onlineUsers,
+      users,
       typingUsers,
       sendMessage,
       setCurrentConversation,
+      startConversation,
       startTyping,
-      stopTyping
+      stopTyping,
+      isLoading
     }}>
       {children}
     </ChatContext.Provider>
