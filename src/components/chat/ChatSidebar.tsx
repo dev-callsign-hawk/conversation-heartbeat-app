@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { 
   Sidebar, 
@@ -21,9 +22,9 @@ import {
   Search, 
   Settings, 
   LogOut, 
-  User,
   Users,
-  Bell
+  Bell,
+  Loader2
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useChat } from '@/contexts/ChatContext';
@@ -47,6 +48,7 @@ export const ChatSidebar: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'chats' | 'friends' | 'requests'>('chats');
   const [showSettings, setShowSettings] = useState(false);
+  const [startingConversation, setStartingConversation] = useState<string | null>(null);
 
   const isCollapsed = state === 'collapsed';
 
@@ -88,7 +90,10 @@ export const ChatSidebar: React.FC = () => {
   };
 
   const handleFriendClick = async (friendId: string) => {
+    setStartingConversation(friendId);
     await startConversation(friendId);
+    setStartingConversation(null);
+    setActiveTab('chats'); // Switch to chats tab after starting conversation
   };
 
   return (
@@ -129,7 +134,7 @@ export const ChatSidebar: React.FC = () => {
                   variant={activeTab === 'chats' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setActiveTab('chats')}
-                  className="flex-1"
+                  className="flex-1 text-xs sm:text-sm"
                 >
                   <MessageCircle className="w-4 h-4 mr-1" />
                   Chats
@@ -138,7 +143,7 @@ export const ChatSidebar: React.FC = () => {
                   variant={activeTab === 'friends' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setActiveTab('friends')}
-                  className="flex-1"
+                  className="flex-1 text-xs sm:text-sm"
                 >
                   <Users className="w-4 h-4 mr-1" />
                   Friends
@@ -147,10 +152,10 @@ export const ChatSidebar: React.FC = () => {
                   variant={activeTab === 'requests' ? 'default' : 'ghost'}
                   size="sm"
                   onClick={() => setActiveTab('requests')}
-                  className="flex-1 relative"
+                  className="flex-1 relative text-xs sm:text-sm"
                 >
                   <Bell className="w-4 h-4 mr-1" />
-                  {!isCollapsed && "Requests"}
+                  Requests
                   {friendRequests.length > 0 && (
                     <Badge className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs bg-red-500">
                       {friendRequests.length}
@@ -169,11 +174,12 @@ export const ChatSidebar: React.FC = () => {
                   <SidebarMenu>
                     {isLoading ? (
                       <div className="p-4 text-center text-muted-foreground">
+                        <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
                         Loading conversations...
                       </div>
                     ) : filteredConversations.length === 0 ? (
-                      <div className="p-4 text-center text-muted-foreground">
-                        No conversations yet
+                      <div className="p-4 text-center text-muted-foreground text-sm">
+                        No conversations yet. Start by selecting a friend!
                       </div>
                     ) : (
                       filteredConversations.map((conversation) => {
@@ -234,7 +240,7 @@ export const ChatSidebar: React.FC = () => {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {filteredFriends.length === 0 ? (
-                      <div className="p-4 text-center text-muted-foreground">
+                      <div className="p-4 text-center text-muted-foreground text-sm">
                         No friends yet. Send friend requests to start chatting!
                       </div>
                     ) : (
@@ -243,6 +249,7 @@ export const ChatSidebar: React.FC = () => {
                           <SidebarMenuButton 
                             onClick={() => handleFriendClick(friend.id)}
                             className="w-full p-3 hover:bg-accent rounded-lg transition-colors cursor-pointer"
+                            disabled={startingConversation === friend.id}
                           >
                             <div className="flex items-center space-x-3 w-full">
                               <div className="relative">
@@ -254,13 +261,18 @@ export const ChatSidebar: React.FC = () => {
                                 <div className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(friend.status)}`} />
                               </div>
                               {!isCollapsed && (
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-sm truncate">
-                                    {friend.username}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground capitalize">
-                                    {friend.status}
-                                  </p>
+                                <div className="flex-1 min-w-0 flex items-center justify-between">
+                                  <div>
+                                    <p className="font-medium text-sm truncate">
+                                      {friend.username}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground capitalize">
+                                      {friend.status}
+                                    </p>
+                                  </div>
+                                  {startingConversation === friend.id && (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -277,7 +289,7 @@ export const ChatSidebar: React.FC = () => {
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {friendRequests.length === 0 && pendingRequests.length === 0 ? (
-                      <div className="p-4 text-center text-muted-foreground">
+                      <div className="p-4 text-center text-muted-foreground text-sm">
                         No friend requests
                       </div>
                     ) : (

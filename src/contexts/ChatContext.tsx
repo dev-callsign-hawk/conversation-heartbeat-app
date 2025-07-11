@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -384,6 +383,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fetchFriends();
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversations'
+        },
+        (payload) => {
+          console.log('Conversation updated:', payload);
+          fetchConversations();
+        }
+      )
       .subscribe();
 
     setChannel(newChannel);
@@ -431,6 +442,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return;
 
     try {
+      setIsLoading(true);
       const { data, error } = await supabase.rpc('get_or_create_conversation', {
         other_user_id: friendId
       });
@@ -448,9 +460,22 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (data) {
         setCurrentConversation(data);
         await fetchConversations();
+        
+        // Switch to chats tab after starting conversation
+        toast({
+          title: "Conversation started!",
+          description: "You can now start chatting.",
+        });
       }
     } catch (err) {
       console.error('Error in startConversation:', err);
+      toast({
+        title: "Error",
+        description: "Failed to start conversation. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
