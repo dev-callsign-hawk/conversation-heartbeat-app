@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -458,10 +459,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data) {
-        setCurrentConversation(data);
+        // Refresh conversations first
         await fetchConversations();
         
-        // Switch to chats tab after starting conversation
+        // Set the current conversation
+        setCurrentConversation(data);
+        
         toast({
           title: "Conversation started!",
           description: "You can now start chatting.",

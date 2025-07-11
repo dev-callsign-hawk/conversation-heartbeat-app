@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,8 +9,6 @@ import {
   Phone, 
   Video, 
   MoreVertical,
-  Circle,
-  Check,
   CheckCheck
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +43,13 @@ export const ChatArea: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto focus input when conversation changes
+  useEffect(() => {
+    if (currentConversation && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [currentConversation]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +144,7 @@ export const ChatArea: React.FC = () => {
               Welcome to Lovable Chat
             </h3>
             <p className="text-gray-500 mt-2 max-w-md">
-              Select a conversation to start chatting or go to Friends tab to start a new conversation
+              Select a conversation from the sidebar or go to Friends tab to start a new conversation
             </p>
           </div>
         </div>

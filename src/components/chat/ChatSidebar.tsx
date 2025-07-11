@@ -1,5 +1,4 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Sidebar, 
   SidebarContent, 
@@ -52,6 +51,13 @@ export const ChatSidebar: React.FC = () => {
 
   const isCollapsed = state === 'collapsed';
 
+  // Switch to chats tab when a conversation is started
+  useEffect(() => {
+    if (currentConversation && activeTab !== 'chats') {
+      setActiveTab('chats');
+    }
+  }, [currentConversation]);
+
   const filteredFriends = friends.filter(friend => 
     friend.username.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -93,7 +99,7 @@ export const ChatSidebar: React.FC = () => {
     setStartingConversation(friendId);
     await startConversation(friendId);
     setStartingConversation(null);
-    setActiveTab('chats'); // Switch to chats tab after starting conversation
+    // The useEffect above will automatically switch to chats tab
   };
 
   return (
