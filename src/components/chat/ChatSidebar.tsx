@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { 
   Sidebar, 
@@ -56,15 +57,19 @@ export const ChatSidebar: React.FC = () => {
     if (currentConversation && activeTab !== 'chats') {
       setActiveTab('chats');
     }
-  }, [currentConversation]);
+  }, [currentConversation, activeTab]);
 
+  // Filter friends based on search term
   const filteredFriends = friends.filter(friend => 
-    friend.username.toLowerCase().includes(searchTerm.toLowerCase())
+    friend.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    friend.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Filter conversations based on search term
   const filteredConversations = conversations.filter(conv => {
     const otherUser = conv.conversation_participants.find(p => p.user_id !== user?.id);
-    return otherUser?.profiles.username.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!otherUser?.profiles) return false;
+    return otherUser.profiles.username.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
   const getStatusColor = (status: string) => {
@@ -96,10 +101,15 @@ export const ChatSidebar: React.FC = () => {
   };
 
   const handleFriendClick = async (friendId: string) => {
-    setStartingConversation(friendId);
-    await startConversation(friendId);
-    setStartingConversation(null);
-    // The useEffect above will automatically switch to chats tab
+    console.log('Friend clicked, ID:', friendId);
+    try {
+      setStartingConversation(friendId);
+      await startConversation(friendId);
+    } catch (error) {
+      console.error('Error starting conversation:', error);
+    } finally {
+      setStartingConversation(null);
+    }
   };
 
   return (
@@ -129,7 +139,7 @@ export const ChatSidebar: React.FC = () => {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search..."
+                  placeholder={`Search ${activeTab}...`}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -185,7 +195,7 @@ export const ChatSidebar: React.FC = () => {
                       </div>
                     ) : filteredConversations.length === 0 ? (
                       <div className="p-4 text-center text-muted-foreground text-sm">
-                        No conversations yet. Start by selecting a friend!
+                        {searchTerm ? 'No matching conversations' : 'No conversations yet. Start by selecting a friend!'}
                       </div>
                     ) : (
                       filteredConversations.map((conversation) => {
@@ -242,19 +252,19 @@ export const ChatSidebar: React.FC = () => {
               </SidebarGroup>
             ) : activeTab === 'friends' ? (
               <SidebarGroup>
-                {!isCollapsed && <SidebarGroupLabel>Your Friends</SidebarGroupLabel>}
+                {!isCollapsed && <SidebarGroupLabel>Your Friends ({friends.length})</SidebarGroupLabel>}
                 <SidebarGroupContent>
                   <SidebarMenu>
                     {filteredFriends.length === 0 ? (
                       <div className="p-4 text-center text-muted-foreground text-sm">
-                        No friends yet. Send friend requests to start chatting!
+                        {searchTerm ? 'No matching friends found' : 'No friends yet. Send friend requests to start chatting!'}
                       </div>
                     ) : (
                       filteredFriends.map((friend) => (
                         <SidebarMenuItem key={friend.id}>
                           <SidebarMenuButton 
                             onClick={() => handleFriendClick(friend.id)}
-                            className="w-full p-3 hover:bg-accent rounded-lg transition-colors cursor-pointer"
+                            className="w-full p-3 hover:bg-accent rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             disabled={startingConversation === friend.id}
                           >
                             <div className="flex items-center space-x-3 w-full">
@@ -268,16 +278,16 @@ export const ChatSidebar: React.FC = () => {
                               </div>
                               {!isCollapsed && (
                                 <div className="flex-1 min-w-0 flex items-center justify-between">
-                                  <div>
+                                  <div className="flex-1 min-w-0">
                                     <p className="font-medium text-sm truncate">
                                       {friend.username}
                                     </p>
-                                    <p className="text-xs text-muted-foreground capitalize">
-                                      {friend.status}
+                                    <p className="text-xs text-muted-foreground capitalize truncate">
+                                      {friend.status} • {friend.email}
                                     </p>
                                   </div>
                                   {startingConversation === friend.id && (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    <Loader2 className="w-4 h-4 animate-spin ml-2 flex-shrink-0" />
                                   )}
                                 </div>
                               )}

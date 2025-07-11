@@ -441,6 +441,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const startConversation = async (friendId: string) => {
     if (!user) return;
+    
+    console.log('Starting conversation with friend:', friendId);
 
     try {
       setIsLoading(true);
@@ -459,11 +461,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       if (data) {
-        // Refresh conversations first
+        console.log('Conversation created/found:', data);
+        
+        // First refresh conversations to get the latest data
         await fetchConversations();
         
-        // Set the current conversation
+        // Then set current conversation
         setCurrentConversation(data);
+        
+        // Fetch messages for this conversation
+        await fetchMessages(data);
         
         toast({
           title: "Conversation started!",
