@@ -43,26 +43,48 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
   const [confirmPassword, setConfirmPassword] = useState('');
   const [username, setUsername] = useState(user?.username || '');
   const [isLoading, setIsLoading] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const handleGenerateInvite = async () => {
+    if (isLoading) return;
+    
     setIsLoading(true);
-    const code = await generateInviteCode();
-    if (code) {
-      setInviteCode(code);
+    try {
+      const code = await generateInviteCode();
+      if (code) {
+        setInviteCode(code);
+        toast({
+          title: "Invite code generated!",
+          description: "Share this code with friends to connect.",
+        });
+      }
+    } catch (error) {
+      console.error('Error generating invite:', error);
       toast({
-        title: "Invite code generated!",
-        description: "Share this code with friends to connect.",
+        title: "Error",
+        description: "Failed to generate invite code. Please try again.",
+        variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
-  const handleCopyInvite = () => {
-    if (inviteCode) {
-      navigator.clipboard.writeText(inviteCode);
+  const handleCopyInvite = async () => {
+    if (!inviteCode) return;
+    
+    try {
+      await navigator.clipboard.writeText(inviteCode);
       toast({
         title: "Copied!",
         description: "Invite code copied to clipboard.",
+      });
+    } catch (error) {
+      console.error('Error copying to clipboard:', error);
+      toast({
+        title: "Error",
+        description: "Failed to copy invite code.",
+        variant: "destructive",
       });
     }
   };
@@ -77,10 +99,17 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
       return;
     }
 
+    if (isLoading) return;
+
     setIsLoading(true);
-    await sendFriendRequestByInvite(friendInviteCode.trim());
-    setFriendInviteCode('');
-    setIsLoading(false);
+    try {
+      await sendFriendRequestByInvite(friendInviteCode.trim());
+      setFriendInviteCode('');
+    } catch (error) {
+      console.error('Error sending friend request:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleUpdatePassword = async () => {
@@ -111,26 +140,38 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
       return;
     }
 
-    setIsLoading(true);
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    });
+    if (passwordLoading) return;
 
-    if (error) {
+    setPasswordLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Password updated successfully.",
+        });
+        setNewPassword('');
+        setConfirmPassword('');
+      }
+    } catch (error) {
+      console.error('Error updating password:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Failed to update password. Please try again.",
         variant: "destructive",
       });
-    } else {
-      toast({
-        title: "Success",
-        description: "Password updated successfully.",
-      });
-      setNewPassword('');
-      setConfirmPassword('');
+    } finally {
+      setPasswordLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleUpdateProfile = async () => {
@@ -143,25 +184,37 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
       return;
     }
 
-    setIsLoading(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ username: username.trim() })
-      .eq('id', user?.id);
+    if (isLoading) return;
 
-    if (error) {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ username: username.trim() })
+        .eq('id', user?.id);
+
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: "Profile updated successfully.",
+        });
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
       toast({
         title: "Error",
-        description: error.message,
+        description: "Failed to update profile. Please try again.",
         variant: "destructive",
       });
-    } else {
-      toast({
-        title: "Success",
-        description: "Profile updated successfully.",
-      });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -231,8 +284,11 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button onClick={handleUpdateProfile} disabled={isLoading}>
-                    Save Changes
+                  <Button 
+                    onClick={handleUpdateProfile} 
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Saving...' : 'Save Changes'}
                   </Button>
                 </div>
               </CardContent>
@@ -260,9 +316,12 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
                       placeholder="Generate an invite code to share"
                       className="font-mono"
                     />
-                    <Button onClick={handleGenerateInvite} disabled={isLoading}>
+                    <Button 
+                      onClick={handleGenerateInvite} 
+                      disabled={isLoading}
+                    >
                       <Link className="w-4 h-4 mr-2" />
-                      Generate
+                      {isLoading ? 'Generating...' : 'Generate'}
                     </Button>
                     {inviteCode && (
                       <Button variant="outline" onClick={handleCopyInvite}>
@@ -284,9 +343,12 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
                       placeholder="Enter friend's invite code"
                       className="font-mono"
                     />
-                    <Button onClick={handleSendFriendRequest} disabled={isLoading}>
+                    <Button 
+                      onClick={handleSendFriendRequest} 
+                      disabled={isLoading}
+                    >
                       <UserPlus className="w-4 h-4 mr-2" />
-                      Add Friend
+                      {isLoading ? 'Adding...' : 'Add Friend'}
                     </Button>
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -330,8 +392,11 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({ open, onOpenChan
                   />
                 </div>
                 <div className="flex justify-end">
-                  <Button onClick={handleUpdatePassword} disabled={isLoading}>
-                    Update Password
+                  <Button 
+                    onClick={handleUpdatePassword} 
+                    disabled={passwordLoading}
+                  >
+                    {passwordLoading ? 'Updating...' : 'Update Password'}
                   </Button>
                 </div>
               </CardContent>

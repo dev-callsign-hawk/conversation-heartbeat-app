@@ -99,13 +99,45 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(false);
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
 
-  // Fetch friends when user logs in
+  // Update user status to online when they login
   useEffect(() => {
     if (user) {
+      updateUserStatus('online');
       fetchFriends();
       fetchFriendRequests();
     }
+
+    // Set user to offline when they leave/close the app
+    const handleBeforeUnload = () => {
+      if (user) {
+        updateUserStatus('offline');
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      if (user) {
+        updateUserStatus('offline');
+      }
+    };
   }, [user]);
+
+  const updateUserStatus = async (status: 'online' | 'offline' | 'away') => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase.rpc('update_user_status', {
+        user_status: status
+      });
+
+      if (error) {
+        console.error('Error updating user status:', error);
+      }
+    } catch (err) {
+      console.error('Error in updateUserStatus:', err);
+    }
+  };
 
   // Fetch conversations when user logs in
   useEffect(() => {
@@ -160,8 +192,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .from('friend_requests')
         .select(`
           *,
-          sender_profile:profiles!sender_id(*),
-          receiver_profile:profiles!receiver_id(*)
+          sender_profile:profiles!friend_requests_sender_id_fkey(*),
+          receiver_profile:profiles!friend_requests_receiver_id_fkey(*)
         `)
         .or(`sender_id.eq.${user?.id},receiver_id.eq.${user?.id}`);
 
@@ -337,6 +369,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         },
         (payload) => {
           console.log('Friendship changed:', payload);
+          fetchFriends();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Profile updated:', payload);
           fetchFriends();
         }
       )
@@ -535,7 +579,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return null;
 
     try {
-      const { data, error } = await supabase.rpc('generate_friend_invite');
+      // Generate a simple random code instead of using the problematic function
+      const inviteCode = Math.random().toString(36).substring(2, 15);
+      
+      // Update the user's profile with the invite code
+      const { error } = await supabase
+        .from('profiles')
+        .update({ invite_code: inviteCode })
+        .eq('id', user.id);
 
       if (error) {
         console.error('Error generating invite code:', error);
@@ -547,9 +598,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return null;
       }
 
-      return data;
+      return inviteCode;
     } catch (err) {
       console.error('Error in generateInviteCode:', err);
+      toast({
+        title: "Error",
+        description: "Failed to generate invite code. Please try again.",
+        variant: "destructive",
+      });
       return null;
     }
   };
