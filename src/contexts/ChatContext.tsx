@@ -170,8 +170,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const received = (data || []).filter(req => req.receiver_id === user?.id && req.status === 'pending');
-      const sent = (data || []).filter(req => req.sender_id === user?.id && req.status === 'pending');
+      // Type cast the data with proper type safety
+      const typedRequests: FriendRequest[] = (data || []).map(req => ({
+        id: req.id,
+        sender_id: req.sender_id,
+        receiver_id: req.receiver_id,
+        status: req.status as 'pending' | 'accepted' | 'rejected',
+        created_at: req.created_at,
+        sender_profile: {
+          id: req.sender_profile.id,
+          username: req.sender_profile.username,
+          email: req.sender_profile.email,
+          avatar_url: req.sender_profile.avatar_url,
+          status: (req.sender_profile.status as 'online' | 'offline' | 'away') || 'offline',
+          last_seen: req.sender_profile.last_seen,
+        },
+        receiver_profile: {
+          id: req.receiver_profile.id,
+          username: req.receiver_profile.username,
+          email: req.receiver_profile.email,
+          avatar_url: req.receiver_profile.avatar_url,
+          status: (req.receiver_profile.status as 'online' | 'offline' | 'away') || 'offline',
+          last_seen: req.receiver_profile.last_seen,
+        }
+      }));
+
+      const received = typedRequests.filter(req => req.receiver_id === user?.id && req.status === 'pending');
+      const sent = typedRequests.filter(req => req.sender_id === user?.id && req.status === 'pending');
 
       setFriendRequests(received);
       setPendingRequests(sent);
