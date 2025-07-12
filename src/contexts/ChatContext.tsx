@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -66,7 +65,7 @@ interface ChatContextType {
   typingUsers: string[];
   sendMessage: (conversationId: string, content: string) => Promise<void>;
   setCurrentConversation: (conversationId: string | null) => void;
-  startConversation: (userId: string) => Promise<void>;
+  startConversation: (userId: string) => Promise<string | null>;
   sendFriendRequest: (userId: string) => Promise<void>;
   sendFriendRequestByInvite: (inviteCode: string) => Promise<void>;
   acceptFriendRequest: (requestId: string) => Promise<void>;
@@ -202,7 +201,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // Type cast the data with proper type safety
       const typedRequests: FriendRequest[] = (data || []).map(req => ({
         id: req.id,
         sender_id: req.sender_id,
@@ -439,14 +437,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const startConversation = async (friendId: string) => {
-    if (!user) return;
+  const startConversation = async (friendId: string): Promise<string | null> => {
+    if (!user) return null;
     
     console.log('Starting conversation with friend:', friendId);
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase.rpc('get_or_create_conversation', {
+      
+      // First, get or create the conversation
+      const { data: conversationId, error } = await supabase.rpc('get_or_create_conversation', {
         other_user_id: friendId
       });
 
@@ -457,26 +457,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           description: "Failed to start conversation. Please try again.",
           variant: "destructive",
         });
-        return;
+        return null;
       }
 
-      if (data) {
-        console.log('Conversation created/found:', data);
+      if (conversationId) {
+        console.log('Conversation created/found:', conversationId);
         
-        // First refresh conversations to get the latest data
+        // Refresh conversations to get the latest data
         await fetchConversations();
         
-        // Then set current conversation
-        setCurrentConversation(data);
-        
-        // Fetch messages for this conversation
-        await fetchMessages(data);
+        // Wait a short moment for the state to update, then set current conversation
+        setTimeout(() => {
+          setCurrentConversation(conversationId);
+        }, 100);
         
         toast({
           title: "Conversation started!",
           description: "You can now start chatting.",
         });
+        
+        return conversationId;
       }
+      
+      return null;
     } catch (err) {
       console.error('Error in startConversation:', err);
       toast({
@@ -484,6 +487,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "Failed to start conversation. Please try again.",
         variant: "destructive",
       });
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -614,10 +618,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!user) return null;
 
     try {
-      // Generate a simple random code instead of using the problematic function
       const inviteCode = Math.random().toString(36).substring(2, 15);
       
-      // Update the user's profile with the invite code
       const { error } = await supabase
         .from('profiles')
         .update({ invite_code: inviteCode })

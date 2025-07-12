@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Sidebar, 
@@ -52,13 +51,6 @@ export const ChatSidebar: React.FC = () => {
 
   const isCollapsed = state === 'collapsed';
 
-  // Switch to chats tab when a conversation is started
-  useEffect(() => {
-    if (currentConversation && activeTab !== 'chats') {
-      setActiveTab('chats');
-    }
-  }, [currentConversation, activeTab]);
-
   // Filter friends based on search term
   const filteredFriends = friends.filter(friend => 
     friend.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,7 +96,19 @@ export const ChatSidebar: React.FC = () => {
     console.log('Friend clicked, ID:', friendId);
     try {
       setStartingConversation(friendId);
-      await startConversation(friendId);
+      
+      // Start the conversation and get the conversation ID
+      const conversationId = await startConversation(friendId);
+      
+      if (conversationId) {
+        // Switch to chats tab to show the conversation
+        setActiveTab('chats');
+        
+        // Small delay to ensure conversations are loaded
+        setTimeout(() => {
+          setCurrentConversation(conversationId);
+        }, 200);
+      }
     } catch (error) {
       console.error('Error starting conversation:', error);
     } finally {
