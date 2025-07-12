@@ -101,13 +101,18 @@ export const ChatSidebar: React.FC = () => {
       const conversationId = await startConversation(friendId);
       
       if (conversationId) {
+        console.log('Conversation started successfully:', conversationId);
+        
         // Switch to chats tab to show the conversation
         setActiveTab('chats');
         
-        // Small delay to ensure conversations are loaded
+        // Wait for conversation list to update, then set current conversation
         setTimeout(() => {
+          console.log('Setting current conversation to:', conversationId);
           setCurrentConversation(conversationId);
-        }, 200);
+        }, 300);
+      } else {
+        console.error('Failed to start conversation - no conversation ID returned');
       }
     } catch (error) {
       console.error('Error starting conversation:', error);

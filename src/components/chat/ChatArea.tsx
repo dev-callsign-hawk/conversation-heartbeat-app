@@ -132,6 +132,27 @@ export const ChatArea: React.FC = () => {
     return content;
   };
 
+  // Show loading state if conversation is being loaded
+  if (currentConversation && !currentConv) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-50/50 to-purple-50/50">
+        <div className="text-center space-y-4 p-8">
+          <div className="w-16 h-16 chat-gradient rounded-2xl flex items-center justify-center mx-auto animate-pulse">
+            <Send className="w-8 h-8 text-white" />
+          </div>
+          <div>
+            <h3 className="text-xl font-semibold text-gray-700">
+              Loading conversation...
+            </h3>
+            <p className="text-gray-500 mt-2 max-w-md">
+              Please wait while we load your chat
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentConversation || !otherUser) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-blue-50/50 to-purple-50/50">

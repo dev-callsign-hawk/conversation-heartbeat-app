@@ -262,6 +262,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('Error fetching conversations:', error);
+        toast({
+          title: "Error loading conversations",
+          description: "Please refresh the page or try again later.",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -286,9 +291,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }))
       }));
 
+      console.log('Fetched conversations:', typedConversations);
       setConversations(typedConversations);
     } catch (err) {
       console.error('Error in fetchConversations:', err);
+      toast({
+        title: "Network error",
+        description: "Could not load conversations. Please check your connection.",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -307,6 +318,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) {
         console.error('Error fetching messages:', error);
+        toast({
+          title: "Error loading messages",
+          description: "Could not load conversation messages.",
+          variant: "destructive",
+        });
         return;
       }
 
@@ -320,9 +336,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profiles: msg.profiles || { username: 'Unknown', avatar_url: null }
       }));
 
+      console.log('Fetched messages for conversation:', conversationId, typedMessages);
       setMessages(typedMessages);
     } catch (err) {
       console.error('Error in fetchMessages:', err);
+      toast({
+        title: "Network error",
+        description: "Could not load messages. Please check your connection.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -339,10 +361,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           table: 'messages'
         },
         (payload) => {
-          console.log('New message:', payload);
-          if (payload.new.conversation_id === currentConversation) {
+          console.log('New message received:', payload);
+          const newMessage = payload.new as any;
+          
+          // If message is for current conversation, refresh messages
+          if (newMessage.conversation_id === currentConversation) {
             fetchMessages(currentConversation);
           }
+          
+          // Always refresh conversations to update last message preview
+          fetchConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'conversation_participants'
+        },
+        (payload) => {
+          console.log('New conversation participant:', payload);
           fetchConversations();
         }
       )
@@ -394,7 +433,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fetchConversations();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     setChannel(newChannel);
   };
